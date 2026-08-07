@@ -18,6 +18,8 @@
 #include <cstdint>
 // inline constexpr size_t SIZE_MAX = 65535;
 
+namespace AlgeFlow {
+
 /* define a static structure sparse matrix from SpMatMttr.setFromTriplets precomputaion in compile-time using CRC*/
 /*Only used in read/write and calculation in runtime, rather than block matrix concatenation */
 template<typename T, size_t Rows, size_t Cols, size_t NNZ, size_t numBlk >
@@ -370,4 +372,4 @@ private:
     }
 };
 
-
+} // namespace AlgeFlow

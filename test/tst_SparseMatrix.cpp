@@ -8,8 +8,8 @@
 #include <cassert>
 #include <utility>
 
-#include "sparseLA.hpp"
+#include "SparseMatrix.hpp"
 
-int main{
-
+int main() {
+    return 0;
 }

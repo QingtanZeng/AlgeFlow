@@ -2,8 +2,9 @@
 cmake_minimum_required(VERSION 3.28)
 
 # 指定使用 clang/clang++ 编译器
-set(CMAKE_C_COMPILER clang)
-set(CMAKE_CXX_COMPILER clang++)
+set(CMAKE_C_COMPILER /usr/bin/clang)
+set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+
 
 # 2. 声明项目名称 and 支持的语言
 project(AlgeFlow VERSION 1.0 LANGUAGES C CXX)

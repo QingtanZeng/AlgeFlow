@@ -10,13 +10,11 @@
 #include <stdexcept>
 #include <cassert>
 #include <utility>
+#include <cmath>
 
 #include "Eigen/Core"
 #include "Eigen/Sparse"
 #include "Eigen/Dense"
-
-#include <cstdint>
-// inline constexpr size_t SIZE_MAX = 65535;
 
 namespace AlgeFlow {
 
@@ -77,7 +75,7 @@ public:
         struct EleMap{
             size_t idxRLcl_, idxCLcl_;    // local coordinate of elements in block matrix
             size_t idxCSC_;           // wolrd coordinate in full matrix
-        }
+        };
         std::vector<EleMap> elemap_;        // elemap by local CSC index
 
         BlkMap(size_t rS=0, size_t cS=0, size_t r=0, size_t c=0, size_t nnz=0) 
@@ -91,11 +89,18 @@ public:
     size_t n_ ;     // Column
     // size_t nnz_ = 0;   // non-zero values, only used in SpMatSttc
     /*Constructor & Destructor*/
-    SpMatMtbl(size_t r, size_t c) : m_(r), n_(c), isSrt_(false){}
+    SpMatMtbl(size_t r=0, size_t c=0) : m_(r), n_(c), isSrt_(false){}
     ~SpMatMtbl() = default;
+
     /*Read Class states or data*/
-    size_t getSizeTriplets(void){return triplets_.size();} 
-    size_t getSizeBlkmap(void){return blkmap_.size();} 
+    size_t getSizeTriplets() const { return triplets_.size(); } 
+    size_t getSizeBlkmap() const { return blkmap_.size(); } 
+    size_t rows() const { return m_; }
+    size_t cols() const { return n_; }
+    size_t nonZeros() const { return values_.size(); }
+    const std::vector<T>& values() const { return values_; }
+    const std::vector<size_t>& colPtr() const { return colPtr_; }
+    const std::vector<size_t>& rowIdx() const { return rowIdx_; }
 
     /*Function(Not Used): Add separate element */
     void addElem(size_t r, size_t c, T v){
@@ -107,26 +112,28 @@ public:
     template<typename Derived>
     void addBlkMtrx(size_t rStrt, size_t cStrt, const Eigen::MatrixBase<Derived>& mat, bool isSp, double epsilon=1e-9){
         static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
-        if( (rStrt+mat.rows() > m_) || (cStrt+mat.cols() > n_) ){
+        size_t mRows = static_cast<size_t>(mat.rows());
+        size_t nCols = static_cast<size_t>(mat.cols());
+        if( (rStrt + mRows > m_) || (cStrt + nCols > n_) ){
             throw std::out_of_range("Block matrix exceeds outer matrix bounds");
         }
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mat.rows(), mat.cols(), mat.rows()*mat.cols());
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, mRows * nCols);
         auto& blkmap = blkmap_.back();
 
         if(isSp==false)
-            triplets_.reserve(triplets_.size() + mat.rows()*mat.cols());
+            triplets_.reserve(triplets_.size() + mRows * nCols);
         else
-            triplets_.reserve(triplets_.size() + (size_t)(0.1 * mat.rows()*mat.cols()) );
+            triplets_.reserve(triplets_.size() + (size_t)(0.1 * mRows * nCols) );
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t idxC = 0; idxC != mat.cols(); ++idxC){ // Column Major
-            for (size_t idxR=0; idxR!=mat.rows(); ++idxR) {
+        for(size_t idxC = 0; idxC != nCols; ++idxC){ // Column Major
+            for (size_t idxR=0; idxR!=mRows; ++idxR) {
                 bool flgKeep = !isSp || (std::abs(mat(idxR, idxC)) > epsilon) ;
                 if(flgKeep){
                     triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat(idxR, idxC), true, blkId, idxCSCLcl);
-                    blkmap.elemap_.emplace_back({idxR, idxC, SIZE_MAX});
+                    blkmap.elemap_.emplace_back(typename BlkMap::EleMap{idxR, idxC, SIZE_MAX});
                     ++idxCSCLcl;
                 }
             }
@@ -136,22 +143,27 @@ public:
     template<typename Derived>
     void addBlkMtrx(size_t rStrt, size_t cStrt, const Eigen::SparseMatrixBase<Derived>& smat){
         static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
-        if( (rStrt+smat.rows() > m_) || (cStrt+smat.cols() > n_) ){
+        size_t mRows = static_cast<size_t>(smat.rows());
+        size_t nCols = static_cast<size_t>(smat.cols());
+        size_t nnz = static_cast<size_t>(smat.derived().nonZeros());
+        if( (rStrt + mRows > m_) || (cStrt + nCols > n_) ){
             throw std::out_of_range("Block matrix exceeds outer matrix bounds");
         }
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, smat.rows(), smat.cols(), smat.nonZeros());
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, nnz);
         auto& blkmap = blkmap_.back();
 
-        triplets_.reserve(triplets_.size()+smat.nonZeros());
+        triplets_.reserve(triplets_.size() + nnz);
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t k=0; k!=smat.outerSize(); ++k){
+        for(size_t k=0; k!=static_cast<size_t>(smat.outerSize()); ++k){
             for(typename Derived::InnerIterator it(smat.derived(), k); it; ++it){
-                triplets_.emplace_back(rStrt+it.row(), cStrt+it.col(), it.value(), true, blkId, idxCSCLcl);
-                blkmap.elemap_.emplace_back({it.row(), it.col(), SIZE_MAX});
+                size_t rLcl = static_cast<size_t>(it.row());
+                size_t cLcl = static_cast<size_t>(it.col());
+                triplets_.emplace_back(rStrt + rLcl, cStrt + cLcl, it.value(), true, blkId, idxCSCLcl);
+                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, cLcl, SIZE_MAX});
                 ++idxCSCLcl;
             }
         }
@@ -162,30 +174,30 @@ public:
     template<typename Derived>
     void stack(const Eigen::MatrixBase<Derived>& mat, ConcatMode catmode, bool isSp, double epsilon=1e-9){
         static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
+        size_t mRows = static_cast<size_t>(mat.rows());
+        size_t nCols = static_cast<size_t>(mat.cols());
         
         // move self matrix and determine concated matrix position
-        auto [rStrt, cStrt] = ConcatMove(catmode, mat.rows(), mat.cols());
+        auto [rStrt, cStrt] = ConcatMove(catmode, mRows, nCols);
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mat.rows(), mat.cols(), mat.rows()*mat.cols());
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, mRows * nCols);
         auto& blkmap = blkmap_.back();
 
         if(isSp==false)
-            triplets_.reserve(triplets_.size() + mat.rows()*mat.cols());
+            triplets_.reserve(triplets_.size() + mRows * nCols);
         else
-            triplets_.reserve(triplets_.size() + (size_t)(0.1 * mat.rows()*mat.cols()) );
+            triplets_.reserve(triplets_.size() + (size_t)(0.1 * mRows * nCols) );
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t idxC = 0; idxC != mat.cols(); ++idxC){ // Column Major
-            for (size_t idxR=0; idxR!=mat.rows(); ++idxR) {
-                if(isSp == true){
-                    bool flgKeep = !isSp || (std::abs(mat(idxR, idxC)) > epsilon) ;
-                    if(flgKeep){
-                        triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat(idxR, idxC), true, blkId, idxCSCLcl);
-                        blkmap.elemap_.emplace_back({idxR, idxC, SIZE_MAX});
-                        ++idxCSCLcl;
-                    }
+        for(size_t idxC = 0; idxC != nCols; ++idxC){ // Column Major
+            for (size_t idxR=0; idxR!=mRows; ++idxR) {
+                bool flgKeep = !isSp || (std::abs(mat(idxR, idxC)) > epsilon) ;
+                if(flgKeep){
+                    triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat(idxR, idxC), true, blkId, idxCSCLcl);
+                    blkmap.elemap_.emplace_back(typename BlkMap::EleMap{idxR, idxC, SIZE_MAX});
+                    ++idxCSCLcl;
                 }
             }
         }
@@ -194,31 +206,37 @@ public:
     template<typename Derived>
     void stack(const Eigen::SparseMatrixBase<Derived>& smat, ConcatMode catmode){
         static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
+        size_t mRows = static_cast<size_t>(smat.rows());
+        size_t nCols = static_cast<size_t>(smat.cols());
+        size_t nnz = static_cast<size_t>(smat.derived().nonZeros());
         
         // move self matrix and determine concated matrix position
-        auto [rStrt, cStrt] = ConcatMove(catmode, smat.rows(), smat.cols());
+        auto [rStrt, cStrt] = ConcatMove(catmode, mRows, nCols);
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, smat.rows(), smat.cols(), smat.nonZeros());
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, nnz);
         auto& blkmap = blkmap_.back();
 
-        triplets_.reserve(triplets_.size()+smat.nonZeros());
+        triplets_.reserve(triplets_.size() + nnz);
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t k=0; k!=smat.outerSize(); ++k){
+        for(size_t k=0; k!=static_cast<size_t>(smat.outerSize()); ++k){
             for(typename Derived::InnerIterator it(smat.derived(), k); it; ++it){
-                triplets_.emplace_back(rStrt+it.row(), cStrt+it.col(), it.value(), true, blkId, idxCSCLcl);
-                blkmap.elemap_.emplace_back({it.row(), it.col(), SIZE_MAX});
+                size_t rLcl = static_cast<size_t>(it.row());
+                size_t cLcl = static_cast<size_t>(it.col());
+                triplets_.emplace_back(rStrt + rLcl, cStrt + cLcl, it.value(), true, blkId, idxCSCLcl);
+                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, cLcl, SIZE_MAX});
                 ++idxCSCLcl;
             }
         }
         isSrt_ = false;
     }
+
     void stack(SpMatMtbl<T>&& mat, ConcatMode catmode){
         // move self matrix and determine concated matrix position
         auto [rStrt, cStrt] = ConcatMove(catmode, mat.m_, mat.n_);
-        // vector dilataion
+        // vector dilation
         this->triplets_.reserve(this->triplets_.size() + mat.getSizeTriplets());
         this->blkmap_.reserve(this->blkmap_.size() + mat.getSizeBlkmap());
 
@@ -299,6 +317,7 @@ public:
            ++curCol;
            colPtr_[curCol] = values_.size();
         }
+        isSrt_ = true;
     }
 
 private:
@@ -314,40 +333,41 @@ private:
     std::pair<size_t, size_t> 
     ConcatMove(ConcatMode catmode, size_t mRows, size_t nCols){
         size_t rStrt = 0, cStrt = 0;    // Start of input block matrix
+        size_t old_m = this->m_;
+        size_t old_n = this->n_;
+
         switch (catmode) {
             case ConcatMode::Rght :
                 rStrt = 0;
-                cStrt = this->n_;
+                cStrt = old_n;
                 this->n_ += nCols;
-                this->m_ = std::max(this->m_, mRows);
+                this->m_ = std::max(old_m, mRows);
                 break;
             case ConcatMode::Bttm :
-                rStrt = this->m_;
+                rStrt = old_m;
                 cStrt = 0;
                 this->m_ += mRows;
-                this->n_ = std::max(this->n_, nCols);
+                this->n_ = std::max(old_n, nCols);
                 break;
             case ConcatMode::BttmRght :
-                rStrt = this->m_;
-                cStrt = this->n_;
+                rStrt = old_m;
+                cStrt = old_n;
                 this->m_ += mRows;
                 this->n_ += nCols;
                 break;
-            case ConcatMode::TopRght :      // Special case, first move self
-                shift(nCols, DrctShift::Down);
-                this->m_ += mRows;
-                this->n_ += nCols;
-
+            case ConcatMode::TopRght :      // Special case, first move self down
+                shift(mRows, DrctShift::Down);
                 rStrt = 0;
-                cStrt = this->n_;
-                break;
-            case ConcatMode::BttmLft :      // Special case, first move self
-                shift(mRows, DrctShift::Rght);
+                cStrt = old_n;
                 this->m_ += mRows;
                 this->n_ += nCols;
-
-                rStrt = this->m_;
+                break;
+            case ConcatMode::BttmLft :      // Special case, first move self right
+                shift(nCols, DrctShift::Rght);
+                rStrt = old_m;
                 cStrt = 0;
+                this->m_ += mRows;
+                this->n_ += nCols;
                 break;
         }
 
@@ -358,7 +378,7 @@ private:
         switch (drct) {
             case DrctShift::Rght :
                 // move block matrix
-                for(auto& blk: blkmap_) blk.cStrt += N;
+                for(auto& blk: blkmap_) blk.cStrt_ += N;
                 // move triplet
                 for(auto& trip: triplets_) trip.col += N;
                 break;

@@ -1,7 +1,9 @@
+#ifndef ALGEFLOW_SPARSE_MATRIX_HPP
+#define ALGEFLOW_SPARSE_MATRIX_HPP
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <stdint.h>
 #include <array>
 #include <type_traits>
 #include <vector>
@@ -11,6 +13,7 @@
 #include <cassert>
 #include <utility>
 #include <cmath>
+
 
 #include "Eigen/Core"
 #include "Eigen/Sparse"
@@ -101,6 +104,8 @@ public:
     const std::vector<T>& values() const { return values_; }
     const std::vector<size_t>& colPtr() const { return colPtr_; }
     const std::vector<size_t>& rowIdx() const { return rowIdx_; }
+    const std::vector<BlkMap>& blkmap() const { return blkmap_; }
+
 
     /*Function(Not Used): Add separate element */
     void addElem(size_t r, size_t c, T v){
@@ -119,7 +124,7 @@ public:
         }
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, mRows * nCols);
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, 0U);
         auto& blkmap = blkmap_.back();
 
         if(isSp==false)
@@ -138,6 +143,7 @@ public:
                 }
             }
         }
+        blkmap.nnz_ = idxCSCLcl;
         isSrt_ = false;
     }
     template<typename Derived>
@@ -182,7 +188,7 @@ public:
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, mRows * nCols);
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, 0U);
         auto& blkmap = blkmap_.back();
 
         if(isSp==false)
@@ -201,6 +207,7 @@ public:
                 }
             }
         }
+        blkmap.nnz_ = idxCSCLcl ;
         isSrt_ = false;
     }
     template<typename Derived>
@@ -393,3 +400,5 @@ private:
 };
 
 } // namespace AlgeFlow
+
+#endif // ALGEFLOW_SPARSE_MATRIX_HPP

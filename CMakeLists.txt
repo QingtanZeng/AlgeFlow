@@ -26,6 +26,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(AlgeFlow)
 
 target_sources(AlgeFlow
+    PRIVATE
+        src/PrintMatrix.cpp
     PUBLIC
         FILE_SET CXX_MODULES FILES
             src/AlgeFlow.cppm

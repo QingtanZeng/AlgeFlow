@@ -1,79 +1,64 @@
 #include <iostream>
 #include <cassert>
-#include <vector>
+
+#include "Eigen/Core"
 #include "Eigen/Dense"
 #include "Eigen/Sparse"
+
 #include "SparseMatrix.hpp"
+#include "PrintMatrix.hpp"
 
 using namespace AlgeFlow;
 
-void test_addBlkMtrx_dense() {
-    std::cout << "[Test 1] Testing addBlkMtrx with dense Eigen matrix..." << std::endl;
-    SpMatMtbl<double> mat(4, 4);
-
-    Eigen::Matrix2d A;
-    A << 1.0, 2.0,
-         3.0, 4.0;
-
-    mat.addBlkMtrx(0, 0, A, false);
-    mat.setFromTriplets();
-
-    assert(mat.rows() == 4);
-    assert(mat.cols() == 4);
-    assert(mat.nonZeros() == 4);
-
-    std::cout << "  Passed dense block test!" << std::endl;
-}
-
-void test_addBlkMtrx_sparse() {
-    std::cout << "[Test 2] Testing addBlkMtrx with sparse Eigen matrix..." << std::endl;
-    SpMatMtbl<double> mat(3, 3);
-
-    Eigen::SparseMatrix<double> S(2, 2);
-    S.insert(0, 0) = 5.0;
-    S.insert(1, 1) = 10.0;
-    S.makeCompressed();
-
-    mat.addBlkMtrx(1, 1, S);
-    mat.setFromTriplets();
-
-    assert(mat.rows() == 3);
-    assert(mat.cols() == 3);
-    assert(mat.nonZeros() == 2);
-
-    std::cout << "  Passed sparse block test!" << std::endl;
-}
-
-void test_stack() {
-    std::cout << "[Test 3] Testing matrix stack / concatenation..." << std::endl;
-    SpMatMtbl<double> matA(2, 2);
-
-    Eigen::Matrix2d A;
-    A << 1.0, 0.0,
-         0.0, 2.0;
-    matA.addBlkMtrx(0, 0, A, true);
-
-    Eigen::Matrix2d B;
-    B << 3.0, 4.0,
-         0.0, 5.0;
-
-    matA.stack(B, SpMatMtbl<double>::ConcatMode::Rght, false);
-    matA.setFromTriplets();
-
-    assert(matA.rows() == 2);
-    assert(matA.cols() == 4);
-
-    std::cout << "  Passed matrix stack test!" << std::endl;
-}
 
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << " Running AlgeFlow SparseMatrix Unit Tests" << std::endl;
     std::cout << "========================================" << std::endl;
 
-    test_addBlkMtrx_dense();
-    test_addBlkMtrx_sparse();
-    test_stack();
+    // 1. Initialize 2x2 mutable sparse matrix
+    SpMatMtbl<double> matA(2, 2);
+
+    // 2. Add sparse 2x2 block c1 at (0, 0)
+    Eigen::SparseMatrix<double> c1(2, 2);
+    c1.insert(0, 1) = 0.1;
+    c1.insert(1, 0) = 0.3;
+    c1.makeCompressed();
+    matA.addBlkMtrx(0, 0, c1);
+
+    // 3. Stack c2 (2x2) at BttmRght -> Resulting size: 4x4
+    Eigen::Matrix<double, 2, 2> c2;
+    c2 << 1.0, 0.0,
+          0.0, 4.0;
+    matA.stack(c2, SpMatMtbl<double>::ConcatMode::BttmRght, true);
+
+    // 4. Stack I (6x6 Identity) at TopRght -> Resulting size: 10x10
+    Eigen::SparseMatrix<double> I(6, 6);
+    I.setIdentity();
+    I.makeCompressed();
+    matA.stack(I, SpMatMtbl<double>::ConcatMode::TopRght);
+
+    // 5. Add dense 4x6 block d at (6, 4) with threshold filtering (> 0.5)
+    Eigen::Matrix<double, 4, 6> d;
+    d <<  0.8, -0.2,  0.6,  0.1,  0.9, -0.4,
+         -0.1,  0.7, -0.3,  0.5, -0.8,  0.2,
+          0.9,  0.4, -0.6,  0.8, -0.1,  0.3,
+         -0.5,  0.6,  0.2, -0.7,  0.4,  0.9;
+    matA.addBlkMtrx(6, 4, d, true, 0.5);
+
+    // 6. Compress COO triplets to CSC format
+    matA.setFromTriplets();
+
+    // 7. Print aligned CSC information, block layout view, and detailed mappings
+    print_spmatmtbl_info(matA);
+    print_csc_aligned(matA);
+    print_dense_view(matA);
+    print_blkmap_mapping(matA);
+
+    // 8. Assertions
+    assert(matA.rows() == 10 && "rows check fails!");
+    assert(matA.cols() == 10 && "cols check fails!");
+    assert(matA.nonZeros() > 0 && "nonZeros check fails!");
 
     std::cout << "\nAll SparseMatrix tests passed successfully!" << std::endl;
     return 0;

@@ -399,6 +399,14 @@ private:
     }
 };
 
+// Kronecker Product
+// template<T>
+// SpMatMtbl<T>& kron(){
+
+// }
+
+// Diagonal assembly
+
 } // namespace AlgeFlow
 
 #endif // ALGEFLOW_SPARSE_MATRIX_HPP

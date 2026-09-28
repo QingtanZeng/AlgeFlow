@@ -14,12 +14,8 @@
 #include <utility>
 #include <cmath>
 
-
-#include "Eigen/Core"
-#include "Eigen/Sparse"
-#include "Eigen/Dense"
-
 namespace AlgeFlow {
+using std::size_t;
 
 /* define a static structure sparse matrix from SpMatMttr.setFromTriplets precomputaion in compile-time using CRC*/
 /*Only used in read/write and calculation in runtime, rather than block matrix concatenation */
@@ -98,8 +94,8 @@ public:
     /*Read Class states or data*/
     constexpr size_t getSizeTriplets() const { return triplets_.size(); } 
     constexpr size_t getSizeBlkmap() const { return blkmap_.size(); } 
-    size_t rows() const { return m_; }
-    size_t cols() const { return n_; }
+    constexpr size_t rows() const { return m_; }
+    constexpr size_t cols() const { return n_; }
     constexpr size_t nonZeros() const { return values_.size(); }
     const std::vector<T>& values() const { return values_; }
     const std::vector<size_t>& colPtr() const { return colPtr_; }

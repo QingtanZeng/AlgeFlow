@@ -13,18 +13,25 @@
 #include <cassert>
 #include <utility>
 #include <cmath>
+#include <mdspan>
+
+#include "cscview.h"
+#include "DenseMatrix.hpp"
 
 namespace AlgeFlow {
 using std::size_t;
+template<typename T>
+using Mat2DColViewConst = std::mdspan<const T, std::dextents<std::size_t, 2>, std::layout_left>;
 
 /* define a static structure sparse matrix from SpMatMttr.setFromTriplets precomputaion in compile-time using CRC*/
 /*Only used in read/write and calculation in runtime, rather than block matrix concatenation */
-template<typename T, size_t Rows, size_t Cols, size_t NNZ, size_t numBlk >
+template<typename T, size_t Rows, size_t Cols, size_t NNZ, size_t NumBlk >
 class SpMatSttc{
 public:
-    size_t m_ = Rows;     // Row
-    size_t n_ = Cols;     // Column
-    size_t nnz_ = NNZ;   // non-zero values
+    static_assert( Rows>0 && Cols>0, "Dimensions must be >0");
+    static constexpr size_t m_ = Rows;     // Row
+    static constexpr size_t n_ = Cols;     // Column
+    static constexpr size_t nnz_ = NNZ;   // non-zero values
 
     /*nested datatype*/
     struct BlkMap{
@@ -38,12 +45,25 @@ public:
         size_t idxRLcl_, idxCLcl_;    // local coordinate of elements in block matrix
         size_t idxCSC_;
     };
+
+    // view
+    constexpr CSCView<T> view(){
+        return CSCView<T>{
+            m_, n_, nnz_,
+            values_.data(), rowIdx_.data(), colPtr_.data() };
+    }
+    constexpr CSCViewConst<T> view() const {
+        return CSCViewConst<T>{
+            m_, n_, nnz_,
+            values_.data(), rowIdx_.data(), colPtr_.data() };
+    }
+
 private:
     std::array<T, NNZ> values_;             // value data
     std::array<size_t, NNZ> rowIdx_;      // Raw index
     std::array<size_t, Cols+1> colPtr_;   // Column index
 
-    std::array<BlkMap, numBlk> blkmap_;     // block matrix's map
+    std::array<BlkMap, NumBlk> blkmap_;     // block matrix's map
     std::array<EleMap, NNZ>    elemap_;     // elemap by local CSC index
 };
 
@@ -104,17 +124,16 @@ public:
 
 
     /*Function(Not Used): Add separate element */
-    void addElem(size_t r, size_t c, T v){
+    constexpr void addElem(size_t r, size_t c, T v){
         if (r>= m_ || c>= n_) throw std::out_of_range("Index out of bounds");
         triplets_.emplace_back(r, c, v, true);
         isSrt_ = false;
     }
     /*Function: Add block matrix through dense or sparse matrix*/
-    template<typename Derived>
-    void addBlkMtrx(size_t rStrt, size_t cStrt, const Eigen::MatrixBase<Derived>& mat, bool isSp, double epsilon=1e-9){
-        static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
-        size_t mRows = static_cast<size_t>(mat.rows());
-        size_t nCols = static_cast<size_t>(mat.cols());
+    void addBlkMtrx(size_t rStrt, size_t cStrt, Mat2DColViewConst<T> mat, 
+                    bool isSp, T epsilon=1e-6){
+        size_t mRows = mat.extent(0);
+        size_t nCols = mat.extent(1);
         if( (rStrt + mRows > m_) || (cStrt + nCols > n_) ){
             throw std::out_of_range("Block matrix exceeds outer matrix bounds");
         }
@@ -131,9 +150,9 @@ public:
         size_t idxCSCLcl = 0;
         for(size_t idxC = 0; idxC != nCols; ++idxC){ // Column Major
             for (size_t idxR=0; idxR!=mRows; ++idxR) {
-                bool flgKeep = !isSp || (std::abs(mat(idxR, idxC)) > epsilon) ;
+                bool flgKeep = !isSp || (std::abs(mat[idxR, idxC]) > epsilon) ;
                 if(flgKeep){
-                    triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat(idxR, idxC), true, blkId, idxCSCLcl);
+                    triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat[idxR, idxC], true, blkId, idxCSCLcl);
                     blkmap.elemap_.emplace_back(typename BlkMap::EleMap{idxR, idxC, SIZE_MAX});
                     ++idxCSCLcl;
                 }
@@ -142,12 +161,13 @@ public:
         blkmap.nnz_ = idxCSCLcl;
         isSrt_ = false;
     }
-    template<typename Derived>
-    void addBlkMtrx(size_t rStrt, size_t cStrt, const Eigen::SparseMatrixBase<Derived>& smat){
-        static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
-        size_t mRows = static_cast<size_t>(smat.rows());
-        size_t nCols = static_cast<size_t>(smat.cols());
-        size_t nnz = static_cast<size_t>(smat.derived().nonZeros());
+
+    void addBlkMtrx(size_t rStrt, size_t cStrt, CSCViewConst<T> smat){
+
+        assert(smat.is_valid());
+        size_t mRows = smat.rows;
+        size_t nCols = smat.cols;
+        size_t nnz = smat.nnz;
         if( (rStrt + mRows > m_) || (cStrt + nCols > n_) ){
             throw std::out_of_range("Block matrix exceeds outer matrix bounds");
         }
@@ -160,12 +180,14 @@ public:
         triplets_.reserve(triplets_.size() + nnz);
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t k=0; k!=static_cast<size_t>(smat.outerSize()); ++k){
-            for(typename Derived::InnerIterator it(smat.derived(), k); it; ++it){
-                size_t rLcl = static_cast<size_t>(it.row());
-                size_t cLcl = static_cast<size_t>(it.col());
-                triplets_.emplace_back(rStrt + rLcl, cStrt + cLcl, it.value(), true, blkId, idxCSCLcl);
-                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, cLcl, SIZE_MAX});
+        for(size_t idxC = 0; idxC != nCols; ++idxC){
+            size_t colStart = smat.colPtr[idxC];
+            size_t colEnd   = smat.colPtr[idxC + 1];
+            for(size_t p = colStart; p != colEnd; ++p){
+                size_t rLcl = smat.rowIdx[p];
+                T val = smat.values[p];
+                triplets_.emplace_back(rStrt + rLcl, cStrt + idxC, val, true, blkId, idxCSCLcl);
+                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, idxC, SIZE_MAX});
                 ++idxCSCLcl;
             }
         }
@@ -173,11 +195,10 @@ public:
     }
 
     /*Function: Stack block matrix through dense or sparse matrix or SpMatMtbl*/
-    template<typename Derived>
-    void stack(const Eigen::MatrixBase<Derived>& mat, ConcatMode catmode, bool isSp, double epsilon=1e-9){
-        static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
-        size_t mRows = static_cast<size_t>(mat.rows());
-        size_t nCols = static_cast<size_t>(mat.cols());
+    void stack(Mat2DColViewConst<T> mat, 
+                ConcatMode catmode, bool isSp, T epsilon=1e-6){
+        size_t mRows = mat.extent(0);
+        size_t nCols = mat.extent(1);
         
         // move self matrix and determine concated matrix position
         auto [rStrt, cStrt] = ConcatMove(catmode, mRows, nCols);
@@ -195,9 +216,9 @@ public:
         size_t idxCSCLcl = 0;
         for(size_t idxC = 0; idxC != nCols; ++idxC){ // Column Major
             for (size_t idxR=0; idxR!=mRows; ++idxR) {
-                bool flgKeep = !isSp || (std::abs(mat(idxR, idxC)) > epsilon) ;
+                bool flgKeep = !isSp || (std::abs(mat[idxR, idxC]) > epsilon) ;
                 if(flgKeep){
-                    triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat(idxR, idxC), true, blkId, idxCSCLcl);
+                    triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat[idxR, idxC], true, blkId, idxCSCLcl);
                     blkmap.elemap_.emplace_back(typename BlkMap::EleMap{idxR, idxC, SIZE_MAX});
                     ++idxCSCLcl;
                 }
@@ -206,12 +227,12 @@ public:
         blkmap.nnz_ = idxCSCLcl ;
         isSrt_ = false;
     }
-    template<typename Derived>
-    void stack(const Eigen::SparseMatrixBase<Derived>& smat, ConcatMode catmode){
-        static_assert(std::is_same<typename Derived::Scalar, T>::value, "Scalar type of the block matrix must match SpMatMtbl's T");
-        size_t mRows = static_cast<size_t>(smat.rows());
-        size_t nCols = static_cast<size_t>(smat.cols());
-        size_t nnz = static_cast<size_t>(smat.derived().nonZeros());
+
+    void stack(CSCViewConst<T> smat, ConcatMode catmode){
+        assert(smat.is_valid());
+        size_t mRows = smat.rows;
+        size_t nCols = smat.cols;
+        size_t nnz = smat.nnz;
         
         // move self matrix and determine concated matrix position
         auto [rStrt, cStrt] = ConcatMove(catmode, mRows, nCols);
@@ -224,12 +245,14 @@ public:
         triplets_.reserve(triplets_.size() + nnz);
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t k=0; k!=static_cast<size_t>(smat.outerSize()); ++k){
-            for(typename Derived::InnerIterator it(smat.derived(), k); it; ++it){
-                size_t rLcl = static_cast<size_t>(it.row());
-                size_t cLcl = static_cast<size_t>(it.col());
-                triplets_.emplace_back(rStrt + rLcl, cStrt + cLcl, it.value(), true, blkId, idxCSCLcl);
-                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, cLcl, SIZE_MAX});
+        for(size_t idxC = 0; idxC != nCols; ++idxC){
+            size_t colStart = smat.colPtr[idxC];
+            size_t colEnd   = smat.colPtr[idxC + 1];
+            for(size_t p = colStart; p != colEnd; ++p){
+                size_t rLcl = smat.rowIdx[p];
+                T val = smat.values[p];
+                triplets_.emplace_back(rStrt + rLcl, cStrt + idxC, val, true, blkId, idxCSCLcl);
+                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, idxC, SIZE_MAX});
                 ++idxCSCLcl;
             }
         }
@@ -256,7 +279,7 @@ public:
                     trip.blkId + offsetBlkId, trip.idxCSCLcl);
         }
         // clear input concated matrix
-        // mat.~SpMatMtbl();    //BUG FIX: 坚决避免对右值引用显式调用析构函数，会导致 double free
+        // mat.~SpMatMtbl();    //BUG FIX: 坚决避免对右值引用显式调用析构函数，会导致 T free
         mat.triplets_.clear();
         mat.blkmap_.clear();
         
@@ -264,7 +287,7 @@ public:
     }
 
     /*Function: sorted and compressed to CSC*/
-    void setFromTriplets(double epsilon=1e-9){
+    void setFromTriplets(T epsilon=1e-6){
         // 1. 按照 CSC 的主序进行排序：先按列排，列相同则按行排
         std::sort(triplets_.begin(), triplets_.end(),[](const Triplet& a, const Triplet& b){
             if(a.col!=b.col) return a.col<b.col;

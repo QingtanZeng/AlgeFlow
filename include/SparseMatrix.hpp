@@ -92,15 +92,15 @@ public:
     size_t n_ ;     // Column
     // size_t nnz_ = 0;   // non-zero values, only used in SpMatSttc
     /*Constructor & Destructor*/
-    SpMatMtbl(size_t r=0, size_t c=0) : m_(r), n_(c), isSrt_(false){}
+    constexpr SpMatMtbl(size_t r=0, size_t c=0) : m_(r), n_(c), isSrt_(false){}
     ~SpMatMtbl() = default;
 
     /*Read Class states or data*/
-    size_t getSizeTriplets() const { return triplets_.size(); } 
-    size_t getSizeBlkmap() const { return blkmap_.size(); } 
+    constexpr size_t getSizeTriplets() const { return triplets_.size(); } 
+    constexpr size_t getSizeBlkmap() const { return blkmap_.size(); } 
     size_t rows() const { return m_; }
     size_t cols() const { return n_; }
-    size_t nonZeros() const { return values_.size(); }
+    constexpr size_t nonZeros() const { return values_.size(); }
     const std::vector<T>& values() const { return values_; }
     const std::vector<size_t>& colPtr() const { return colPtr_; }
     const std::vector<size_t>& rowIdx() const { return rowIdx_; }

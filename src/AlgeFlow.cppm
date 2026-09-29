@@ -3,7 +3,7 @@ module;
 #include "DenseMatrix.hpp"
 #include "SparseMatrix.hpp"
 #include "PrintMatrix.hpp"
-#include "BLAS.cpp"
+#include "BLAS.hpp"
 
 export module AlgeFlow;
 
@@ -23,7 +23,17 @@ export namespace AlgeFlow {
     using AlgeFlow::VecView;
     using AlgeFlow::VecViewConst;
 
-    // BLAS Operations
+    // BLAS Level 1 Operations
+    using AlgeFlow::fill;
+    using AlgeFlow::copy;
+    using AlgeFlow::scal;
+    using AlgeFlow::axpy;
+    using AlgeFlow::dot;
+    using AlgeFlow::nrm2;
+    using AlgeFlow::asum;
+    using AlgeFlow::iamax;
+
+    // BLAS Level 2 & 3 Operations
     using AlgeFlow::gemv;
     using AlgeFlow::gemvT;
     using AlgeFlow::gemm;

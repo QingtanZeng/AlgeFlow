@@ -209,7 +209,7 @@ void print_blkmap_mapping(const SpMatMtbl<double>& mat){
             std::cout << "  " << std::setw(14) << lPos
                       << " -> " << std::setw(14) << wPos;
 
-            if (ele.idxCSC_ != SIZE_MAX) {
+            if (ele.idxCSC_ < SIZE_MAX) {
                 std::cout << " -> csc [" << std::setw(4) << ele.idxCSC_ << "]"
                           << " -> " << std::setw(14) << std::fixed << std::setprecision(4) << values[ele.idxCSC_];
             } else {

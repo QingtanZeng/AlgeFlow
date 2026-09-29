@@ -163,8 +163,8 @@ public:
             triplets_.reserve(triplets_.size() + (size_t)(0.1 * mRows * nCols) );
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t idxC = 0; idxC != nCols; ++idxC){ // Column Major
-            for (size_t idxR=0; idxR!=mRows; ++idxR) {
+        for(size_t idxC = 0; idxC < nCols; ++idxC){ // Column Major
+            for (size_t idxR=0; idxR < mRows; ++idxR) {
                 bool flgKeep = !isSp || (std::abs(mat[idxR, idxC]) > epsilon) ;
                 if(flgKeep){
                     triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat[idxR, idxC], true, blkId, idxCSCLcl);
@@ -195,10 +195,10 @@ public:
         triplets_.reserve(triplets_.size() + nnz);
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t idxC = 0; idxC != nCols; ++idxC){
+        for(size_t idxC = 0; idxC < nCols; ++idxC){
             size_t colStart = smat.colPtr[idxC];
             size_t colEnd   = smat.colPtr[idxC + 1];
-            for(size_t p = colStart; p != colEnd; ++p){
+            for(size_t p = colStart; p < colEnd; ++p){
                 size_t rLcl = smat.rowIdx[p];
                 T val = smat.values[p];
                 triplets_.emplace_back(rStrt + rLcl, cStrt + idxC, val, true, blkId, idxCSCLcl);
@@ -229,8 +229,8 @@ public:
             triplets_.reserve(triplets_.size() + (size_t)(0.1 * mRows * nCols) );
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t idxC = 0; idxC != nCols; ++idxC){ // Column Major
-            for (size_t idxR=0; idxR!=mRows; ++idxR) {
+        for(size_t idxC = 0; idxC < nCols; ++idxC){ // Column Major
+            for (size_t idxR=0; idxR<mRows; ++idxR) {
                 bool flgKeep = !isSp || (std::abs(mat[idxR, idxC]) > epsilon) ;
                 if(flgKeep){
                     triplets_.emplace_back(rStrt+idxR, cStrt+idxC, mat[idxR, idxC], true, blkId, idxCSCLcl);
@@ -260,10 +260,10 @@ public:
         triplets_.reserve(triplets_.size() + nnz);
         // LOOP
         size_t idxCSCLcl = 0;
-        for(size_t idxC = 0; idxC != nCols; ++idxC){
+        for(size_t idxC = 0; idxC < nCols; ++idxC){
             size_t colStart = smat.colPtr[idxC];
             size_t colEnd   = smat.colPtr[idxC + 1];
-            for(size_t p = colStart; p != colEnd; ++p){
+            for(size_t p = colStart; p < colEnd; ++p){
                 size_t rLcl = smat.rowIdx[p];
                 T val = smat.values[p];
                 triplets_.emplace_back(rStrt + rLcl, cStrt + idxC, val, true, blkId, idxCSCLcl);
@@ -326,7 +326,7 @@ public:
             size_t idxCSC = SIZE_MAX;
             
             // check whether into new column, or update colPtr_: middle columns might be empty
-            while(elem.col != curCol){
+            while(curCol < elem.col){
                 ++curCol;
                 colPtr_[curCol] = values_.size();
                 // If Col0 has values, colPtr_[0]==0; If not, colPtr_[0]==colPtr_[1]=0 either.
@@ -354,7 +354,7 @@ public:
         }
 
         // 3. fill in tail of colPtr_
-        while(curCol != n_){
+        while(curCol < n_){
            ++curCol;
            colPtr_[curCol] = values_.size();
         }

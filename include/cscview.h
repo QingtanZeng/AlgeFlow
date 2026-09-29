@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstddef>
 #include <cassert>
 
@@ -28,6 +30,15 @@ struct CSCView{
     T* values;
     const size_t* rowIdx;
     const size_t* colPtr;
+
+    constexpr bool is_valid() const {
+        return values!=nullptr && rowIdx!=nullptr && colPtr!=nullptr;
+    }
+
+    // auto const conversion from CSCView to CSCViewConst
+    constexpr operator CSCViewConst<T>() const {
+        return CSCViewConst<T>{rows, cols, nnz, values, rowIdx, colPtr};
+    }
 };
 
 }

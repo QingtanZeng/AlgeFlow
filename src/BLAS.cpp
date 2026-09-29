@@ -52,7 +52,7 @@ constexpr void gemv(Mat2DColViewConst<T> A, VecViewConst<T> x, VecView<T> y,
     for(size_t idxC=0; idxC!=Cols; ++idxC){
         T alphaXc = alpha * x[idxC];    
         for(size_t idxR=0; idxR!=Rows; ++idxR){
-            y[idxR] = y[idxR] + A[idxR, idxC]; 
+            y[idxR] = y[idxR] + alphaXc * A[idxR, idxC]; 
         }
     }
 }
@@ -79,7 +79,7 @@ constexpr void gemvT(Mat2DColViewConst<T> A, VecViewConst<T> x, VecView<T> y,
     if(alpha==T(0.0)) return;
     for(size_t idxC=0; idxC!=Cols; ++idxC){
         T dot = T(0.0);
-        for(size_t idxR; idxR!=Rows; ++idxR){
+        for(size_t idxR = 0; idxR!=Rows; ++idxR){
             dot += x[idxR] * A[idxR, idxC];
         }
         y[idxC] = y[idxC] + alpha*dot;
@@ -102,9 +102,9 @@ constexpr void gemm(Mat2DColViewConst<T> A, Mat2DColViewConst<T> B, Mat2DColView
     // beta * C
     size_t idx=0;
     if(beta==T(0.0)){
-        for(; idx != C.size(); ++idx) C.values_[idx] = T(0.0);
+        for(; idx != C.size(); ++idx) C.data_handle()[idx] = T(0.0);
     }else{
-        for(; idx != C.size(); ++idx)  C.values_[idx] = C.values_[idx] * beta;
+        for(; idx != C.size(); ++idx)  C.data_handle()[idx] = C.data_handle()[idx] * beta;
     }
 
     if(alpha==T(0.0)) return;

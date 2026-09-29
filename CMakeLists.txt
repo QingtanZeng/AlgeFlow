@@ -40,13 +40,12 @@ target_include_directories(AlgeFlow
 )
 
 # 5. 编译测试可执行文件
-add_executable(tst_SparseMatrix test/tst_SparseMatrix.cpp)
+add_executable(tst_AlgeFlow test/tst_AlgeFlow.cpp)
 
-target_link_libraries(tst_SparseMatrix PRIVATE AlgeFlow)
+target_link_libraries(tst_AlgeFlow PRIVATE AlgeFlow)
 
-target_include_directories(tst_SparseMatrix PRIVATE
+target_include_directories(tst_AlgeFlow PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/libs/eigen
 )
 
-target_compile_options(tst_SparseMatrix PRIVATE -g -O0)
+target_compile_options(tst_AlgeFlow PRIVATE -g -O0)

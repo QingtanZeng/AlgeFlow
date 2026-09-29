@@ -7,6 +7,10 @@
 #include <cmath>
 #include <cassert>
 
+#include "Eigen/Core"
+#include "Eigen/Dense"
+#include "Eigen/Sparse"
+
 #include "PrintMatrix.hpp"
 
 namespace AlgeFlow {

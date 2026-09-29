@@ -122,6 +122,17 @@ public:
     const std::vector<size_t>& rowIdx() const { return rowIdx_; }
     const std::vector<BlkMap>& blkmap() const { return blkmap_; }
 
+    CSCView<T> view(){
+        return CSCView<T>{
+            m_, n_, values_.size(),
+            values_.data(), rowIdx_.data(), colPtr_.data() };
+    }
+    CSCViewConst<T> view() const {
+        return CSCViewConst<T>{
+            m_, n_, values_.size(),
+            values_.data(), rowIdx_.data(), colPtr_.data() };
+    }
+
 
     /*Function(Not Used): Add separate element */
     constexpr void addElem(size_t r, size_t c, T v){

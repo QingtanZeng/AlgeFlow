@@ -57,6 +57,10 @@ public:
             m_, n_, nnz_,
             values_.data(), rowIdx_.data(), colPtr_.data() };
     }
+    constexpr void setZero() {
+        values_.fill(static_cast<T>(0));
+    }
+
 
 private:
     std::array<T, NNZ> values_;             // value data

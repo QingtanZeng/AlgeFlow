@@ -37,20 +37,20 @@ using VecViewConst = std::span<const T>;
 
 // fill: x[:] = val
 template<typename T>
-constexpr void fill(VecView<T> x, T val) {
+inline void fill(VecView<T> x, T val) {
     std::fill(x.begin(), x.end(), val);
 }
 
 // copy: y = x
 template<typename T>
-constexpr void copy(VecViewConst<T> x, VecView<T> y) {
+inline void copy(VecViewConst<T> x, VecView<T> y) {
     assert(x.size() == y.size() && "Vector dimensions mismatch in copy");
     std::copy(x.begin(), x.end(), y.begin());
 }
 
 // scal: x = alpha * x
 template<typename T>
-constexpr void scal(T alpha, VecView<T> x) {
+inline void scal(T alpha, VecView<T> x) {
     if (alpha == T(0.0)) {
         std::fill(x.begin(), x.end(), T(0.0));
     } else if (alpha != T(1.0)) {
@@ -62,7 +62,7 @@ constexpr void scal(T alpha, VecView<T> x) {
 
 // axpy: y = alpha * x + y
 template<typename T>
-constexpr void axpy(T alpha, VecViewConst<T> x, VecView<T> y) {
+inline void axpy(T alpha, VecViewConst<T> x, VecView<T> y) {
     assert(x.size() == y.size() && "Vector dimensions mismatch in axpy");
     if (alpha == T(0.0)) return;
     for (size_t i = 0; i < x.size(); ++i) {
@@ -72,7 +72,7 @@ constexpr void axpy(T alpha, VecViewConst<T> x, VecView<T> y) {
 
 // dot: result = x^T * y
 template<typename T>
-constexpr T dot(VecViewConst<T> x, VecViewConst<T> y) {
+inline T dot(VecViewConst<T> x, VecViewConst<T> y) {
     assert(x.size() == y.size() && "Vector dimensions mismatch in dot");
     T sum = T(0.0);
     for (size_t i = 0; i < x.size(); ++i) {

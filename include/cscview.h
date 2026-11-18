@@ -27,9 +27,9 @@ struct CSCView{
     size_t cols;
     size_t nnz;
     
-    T* values;
-    const size_t* rowIdx;
-    const size_t* colPtr;
+    T* values;              // pointer
+    const size_t* rowIdx;   //pointer
+    const size_t* colPtr;   //pointer
 
     constexpr bool is_valid() const {
         return values!=nullptr && rowIdx!=nullptr && colPtr!=nullptr;

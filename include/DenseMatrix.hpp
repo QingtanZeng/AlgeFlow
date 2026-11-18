@@ -3,7 +3,6 @@
 
 #include <numeric>
 #include <stdexcept>
-#include <cassert>
 #include <array>
 #include <cassert>
 #include <cstddef>

@@ -209,6 +209,42 @@ public:
         isSrt_ = false;
     }
 
+    /* Function: Add block matrix's transposition through dense or sparse matrix */
+    void addBlkMtrxTrsp(size_t rStrt, size_t cStrt, CSCViewConst<T> smat){
+
+        assert(smat.is_valid());
+        size_t mRows = smat.rows;
+        size_t nCols = smat.cols;
+        size_t nnz = smat.nnz;
+        // ! Transposition
+        if( (rStrt + nCols > m_) || (cStrt + mRows > n_) ){
+            throw std::out_of_range("Block matrix exceeds outer matrix bounds");
+        }
+
+        //register a new mapping 
+        size_t blkId = blkmap_.size();
+        // ! Transposition
+        blkmap_.emplace_back(rStrt, cStrt, nCols, mRows, nnz);
+        auto& blkmap = blkmap_.back();
+
+        triplets_.reserve(triplets_.size() + nnz);
+        // LOOP
+        size_t idxCSCLcl = 0;
+        for(size_t idxC = 0; idxC < nCols; ++idxC){
+            size_t colStart = smat.colPtr[idxC];
+            size_t colEnd   = smat.colPtr[idxC + 1];
+            for(size_t p = colStart; p < colEnd; ++p){
+                size_t rLcl = smat.rowIdx[p];
+                T val = smat.values[p];
+                // ! Transposition
+                triplets_.emplace_back(rStrt + idxC, cStrt + rLcl, val, true, blkId, idxCSCLcl);
+                blkmap.elemap_.emplace_back(typename BlkMap::EleMap{rLcl, idxC, SIZE_MAX});
+                ++idxCSCLcl;
+            }
+        }
+        isSrt_ = false;
+    }
+
     /*Function: Stack block matrix through dense or sparse matrix or SpMatMtbl*/
     void stack(Mat2DColViewConst<T> mat, 
                 ConcatMode catmode, bool isSp, T epsilon=1e-6){

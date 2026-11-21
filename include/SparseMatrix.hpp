@@ -17,15 +17,29 @@
 
 #include "cscview.h"
 #include "DenseMatrix.hpp"
+#include "BLAS.hpp"
 
 namespace AlgeFlow {
 using std::size_t;
-template<typename T>
-using Mat2DColViewConst = std::mdspan<const T, std::dextents<std::size_t, 2>, std::layout_left>;
+
+using AlgeFlow::CSCView;
+using AlgeFlow::CSCViewConst;
+using AlgeFlow::Mat2DColView;
+using AlgeFlow::Mat2DColViewConst;
+using AlgeFlow::VecView;
+using AlgeFlow::VecViewConst;
+using AlgeFlow::fill;
+using AlgeFlow::copy;
+using AlgeFlow::scal;
+using AlgeFlow::axpy;
+using AlgeFlow::dot;
+using AlgeFlow::nrm2;
+using AlgeFlow::gemvSp;
+using AlgeFlow::gemvTSp;
 
 /* define a static structure sparse matrix from SpMatMttr.setFromTriplets precomputaion in compile-time using CRC*/
 /*Only used in read/write and calculation in runtime, rather than block matrix concatenation */
-template<typename T, size_t Rows, size_t Cols, size_t NNZ, size_t NumBlk >
+template<typename T, size_t Rows, size_t Cols, size_t NNZ, size_t NumBlk>
 class SpMatSttc{
 public:
     static_assert( Rows>0 && Cols>0, "Dimensions must be >0");
@@ -38,6 +52,7 @@ public:
         size_t rStrt_, cStrt_;        // starting coordinates in full matrix
         size_t rows_, cols_;          // size of block matrix
         size_t nnz_;                    // nnz
+        bool isTrsp_;                // transpose flag
 
         size_t offsetelemap_;           // from offset to offset+nnz in elemap_
     };
@@ -94,15 +109,19 @@ public:
         size_t rStrt_, cStrt_;        // starting coordinates in full matrix
         size_t rows_, cols_;          // size of block matrix
         size_t nnz_;                 // nnz
+        bool isTrsp_;                // transpose flag
 
+        size_t offsetelemap_;           // from offset to offset+nnz in elemap_
         struct EleMap{
             size_t idxRLcl_, idxCLcl_;    // local coordinate of elements in block matrix
             size_t idxCSC_;           // wolrd coordinate in full matrix
         };
         std::vector<EleMap> elemap_;        // elemap by local CSC index
 
-        BlkMap(size_t rS=0, size_t cS=0, size_t r=0, size_t c=0, size_t nnz=0) 
-                : rStrt_(rS), cStrt_(cS), rows_(r), cols_(c), nnz_(nnz){
+        BlkMap(size_t rS, size_t cS, size_t r, size_t c, size_t offset,
+                size_t nnz=0, bool isTrsp=false) 
+                : rStrt_(rS), cStrt_(cS), rows_(r), cols_(c), offsetelemap_(offset),
+                  nnz_(nnz), isTrsp_(isTrsp){
             elemap_.reserve(nnz_);
         }
     };
@@ -154,7 +173,11 @@ public:
         }
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, 0U);
+        size_t offsetelemap = 0;
+        for(size_t idxBlk=0; idxBlk<blkId; ++idxBlk){
+            offsetelemap += blkmap_[idxBlk].nnz_;
+        }
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, offsetelemap, mRows*nCols);
         auto& blkmap = blkmap_.back();
 
         if(isSp==false)
@@ -189,7 +212,11 @@ public:
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, nnz);
+        size_t offsetelemap = 0;
+        for(size_t idxBlk=0; idxBlk<blkId; ++idxBlk){
+            offsetelemap += blkmap_[idxBlk].nnz_;
+        }
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, offsetelemap, nnz);
         auto& blkmap = blkmap_.back();
 
         triplets_.reserve(triplets_.size() + nnz);
@@ -224,7 +251,11 @@ public:
         //register a new mapping 
         size_t blkId = blkmap_.size();
         // ! Transposition
-        blkmap_.emplace_back(rStrt, cStrt, nCols, mRows, nnz);
+        size_t offsetelemap = 0;
+        for(size_t idxBlk=0; idxBlk<blkId; ++idxBlk){
+            offsetelemap += blkmap_[idxBlk].nnz_;
+        }
+        blkmap_.emplace_back(rStrt, cStrt, nCols, mRows, offsetelemap, nnz, true);
         auto& blkmap = blkmap_.back();
 
         triplets_.reserve(triplets_.size() + nnz);
@@ -256,7 +287,11 @@ public:
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, 0U);
+        size_t offsetelemap = 0;
+        for(size_t idxBlk=0; idxBlk<blkId; ++idxBlk){
+            offsetelemap += blkmap_[idxBlk].nnz_;
+        }
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, offsetelemap, mRows*nCols);
         auto& blkmap = blkmap_.back();
 
         if(isSp==false)
@@ -290,7 +325,11 @@ public:
 
         //register a new mapping 
         size_t blkId = blkmap_.size();
-        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, nnz);
+        size_t offsetelemap = 0;
+        for(size_t idxBlk=0; idxBlk<blkId; ++idxBlk){
+            offsetelemap += blkmap_[idxBlk].nnz_;
+        }
+        blkmap_.emplace_back(rStrt, cStrt, mRows, nCols, offsetelemap, nnz);
         auto& blkmap = blkmap_.back();
 
         triplets_.reserve(triplets_.size() + nnz);
@@ -318,9 +357,15 @@ public:
         this->blkmap_.reserve(this->blkmap_.size() + mat.getSizeBlkmap());
 
         size_t offsetBlkId = this->blkmap_.size();      // append B.blkId at end of A
+        size_t offsetelemap = 0;
+        for(size_t idxBlk=0; idxBlk < offsetBlkId; ++idxBlk){
+            offsetelemap += this->blkmap_[idxBlk].nnz_;
+        }
         for(auto& blk: mat.blkmap_){
             blk.rStrt_ += rStrt ;
             blk.cStrt_ += cStrt ;
+            blk.offsetelemap_ = offsetelemap;
+
             this->blkmap_.emplace_back(std::move(blk));
         }
 
@@ -369,7 +414,8 @@ public:
                 // If Colj is empty, colPtr_[j]==colPtr_[j+1]
             }
             // add new element or accumulation same element
-            if(!values_.empty() && rowIdx_.back()==elem.row && curCol==elem.col){
+            // avoid 前一列的最后一个元素与新列的第一个元素恰好行号相同
+            if(!values_.empty() && ( values_.size()>colPtr_[curCol]&&(rowIdx_.back()==elem.row)) && curCol==elem.col){
                 values_.back() += elem.value;
                 idxCSC = values_.size()-1;
             }else{
@@ -476,6 +522,30 @@ private:
 // }
 
 // Diagonal assembly
+
+/* Create special matrix types using SpMatMtbl or SpMatSttc*/
+
+/* Identity matrix*/
+template<typename T>
+SpMatMtbl<T> IdentMatMtbl(size_t dims, T eleval = T(1.0)){
+    SpMatMtbl<T> idmat(dims, dims); 
+
+    std::vector<T> diagVal(dims, eleval);
+    std::vector<size_t> diagRowIdx(dims);
+    std::vector<size_t> diagColIdx(dims + 1);
+
+    for(size_t idx = 0; idx < dims; ++idx){
+        diagRowIdx[idx] = idx;
+        diagColIdx[idx] = idx;
+    }
+    diagColIdx[dims] = dims;
+
+    idmat.addBlkMtrx(0, 0, 
+        CSCViewConst<T>{dims, dims, dims, diagVal.data(), diagRowIdx.data(), diagColIdx.data()});
+    idmat.setFromTriplets();
+
+    return idmat;
+}
 
 } // namespace AlgeFlow
 

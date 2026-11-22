@@ -14,6 +14,8 @@
 #include <utility>
 #include <cmath>
 #include <mdspan>
+#include <concepts>
+#include <functional>
 
 #include "cscview.h"
 #include "DenseMatrix.hpp"
@@ -144,6 +146,8 @@ public:
     const std::vector<size_t>& colPtr() const { return colPtr_; }
     const std::vector<size_t>& rowIdx() const { return rowIdx_; }
     const std::vector<BlkMap>& blkmap() const { return blkmap_; }
+    std::span<Triplet> tripletsView() noexcept{ isSrt_ = false; return triplets_;}
+    std::span<Triplet> tripletsView() const noexcept{ return triplets_;}
 
     CSCView<T> view(){
         return CSCView<T>{
@@ -156,8 +160,7 @@ public:
             values_.data(), rowIdx_.data(), colPtr_.data() };
     }
 
-
-    /*Function(Not Used): Add separate element */
+    /*Function: Add separate element, only for constant values, no mapping-tracked by BlkMap and EleMap */
     constexpr void addElem(size_t r, size_t c, T v){
         if (r>= m_ || c>= n_) throw std::out_of_range("Index out of bounds");
         triplets_.emplace_back(r, c, v, true);
@@ -441,6 +444,18 @@ public:
            colPtr_[curCol] = values_.size();
         }
         isSrt_ = true;
+    }
+
+    /* Function: invoke operation on triplets_*/
+    /* Only accept named function/lamda Fn& */
+    template<typename Fn>
+    requires std::invocable<Fn&, Triplet&>
+    void transformTriplets(Fn& fn, bool rebuildCSC = true, T epsilon=1e-6){
+        for(auto& triplet : triplets_){
+            std::invoke(fn, triplet);
+        }
+        isSrt_ = false;
+        if(rebuildCSC) setFromTriplets(epsilon);
     }
 
 private:
